@@ -2,7 +2,7 @@ apiVersion: flagger.app/v1beta1
 kind: Canary
 metadata:
   name: front-end
-  namespace: sock-app
+  namespace: sock-shop
 spec:
   # deployment reference
   targetRef:
