@@ -1,0 +1,10 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Sidecar
+metadata:
+  name: default
+  namespace: sock-shop
+spec:
+  egress:
+    - hosts:
+        - "sock-shop/*"
+        - "istio-system/*"

@@ -1,0 +1,79 @@
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: front-end
+  namespace: sock-app
+spec:
+  # deployment reference
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: front-end
+  # the maximum time in seconds for the canary deployment
+  # to make progress before it is rollback (default 600s)
+  progressDeadlineSeconds: 60
+  # HPA reference (optional)
+  autoscalerRef:
+    apiVersion: autoscaling/v2beta1
+    kind: HorizontalPodAutoscaler
+    name: front-end
+  service:
+    # container port
+    port: 8079
+    trafficPolicy:
+      tls:
+        # use ISTIO_MUTUAL when mTLS is enabled
+        mode: DISABLE
+    # Istio gateways (optional)
+    gateways:
+    - public-gateway.istio-system.svc.cluster.local
+    # Istio virtual service host names (optional)
+    hosts:
+    - "*"
+  analysis:
+    # schedule interval (default 60s)
+    interval: 15s
+    # max number of failed metric checks before rollback
+    threshold: 10
+    # total number of iterations
+    iterations: 10
+    # canary match condition
+    match:
+      - headers:
+          user-agent:
+            regex: ".*Firefox.*"
+            #regex: "^(?!.*(?:Chrome|Edge)).*Safari"
+      - headers:
+          cookie:
+            regex: "^(.*?;)?(type=insider)(;.*)?$"
+    # Istio Prometheus checks
+    metrics:
+      - name: error-rate
+        templateRef:
+          name: error-rate
+          namespace: istio-system
+        thresholdRange:
+          max: 1
+        interval: 30s
+      - name: latency
+        templateRef:
+          name: latency
+          namespace: istio-system
+        thresholdRange:
+          max: 500
+        interval: 30s
+    # tests
+    webhooks:
+      - name: conformance-test
+        type: pre-rollout
+        timeout: 15s
+        url: http://flagger-loadtester.prod/
+        metadata:
+          type: bash
+          cmd: "curl -sd 'test' http://front-end-canary.prod:8079/token | grep token"
+      - name: load-test
+        type: rollout
+        timeout: 15s
+        url: http://flagger-loadtester.prod/
+        metadata:
+          cmd: "hey -z 1m -q 10 -c 2 -H 'Cookie: type=insider' http://front-end.prod:8079/"
