@@ -47,21 +47,21 @@ spec:
           cookie:
             regex: "^(.*?;)?(type=insider)(;.*)?$"
     # Istio Prometheus checks
-    metrics:
-      - name: error-rate
-        templateRef:
-          name: error-rate
-          namespace: istio-system
-        thresholdRange:
-          max: 1
-        interval: 30s
-      - name: latency
-        templateRef:
-          name: latency
-          namespace: istio-system
-        thresholdRange:
-          max: 500
-        interval: 30s
+    # metrics:
+    #   - name: error-rate
+    #     templateRef:
+    #       name: error-rate
+    #       namespace: istio-system
+    #     thresholdRange:
+    #       max: 1
+    #     interval: 30s
+    #   - name: latency
+    #     templateRef:
+    #       name: latency
+    #       namespace: istio-system
+    #     thresholdRange:
+    #       max: 500
+    #     interval: 30s
     # tests
     # webhooks:
     #   - name: conformance-test
