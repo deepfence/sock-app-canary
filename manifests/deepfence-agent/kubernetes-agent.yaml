@@ -1,0 +1,231 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: deepfence
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deepfence-agent
+  labels:
+    name: deepfence-agent
+  namespace: deepfence
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: deepfence-agent
+  labels:
+    name: deepfence-agent
+rules:
+  - apiGroups:
+      - crd.projectcalico.org
+    resources:
+      - globalnetworkpolicies
+      - hostendpoints
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - ''
+    resources:
+      - pods/exec
+    verbs:
+      - get
+      - create
+  - apiGroups:
+      - ''
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+      - delete
+  - apiGroups:
+      - ''
+    resources:
+      - pods/log
+      - services
+      - nodes
+      - namespaces
+      - persistentvolumes
+      - persistentvolumeclaims
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - cronjobs
+      - jobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+    resources:
+      - deployments
+      - daemonsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+    resources:
+      - deployments/scale
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - storage.k8s.io
+    resources:
+      - storageclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - volumesnapshot.external-storage.k8s.io
+    resources:
+      - volumesnapshots
+      - volumesnapshotdatas
+    verbs:
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: deepfence-agent
+  labels:
+    name: deepfence-agent
+roleRef:
+  kind: ClusterRole
+  name: deepfence-agent
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: deepfence-agent
+    namespace: deepfence
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: deepfence-agent-daemon
+  namespace: deepfence
+spec:
+  selector:
+    matchLabels:
+      app: deepfence-agent
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: deepfence-agent
+    spec:
+      hostPID: true
+      hostNetwork: true
+      serviceAccountName: deepfence-agent
+      dnsPolicy: ClusterFirstWithHostNet
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: kernel-sys
+          hostPath:
+            path: /sys/kernel/debug
+            type: Directory
+        - name: docker-file
+          hostPath:
+            path: /var/lib/docker
+            type: Directory
+        - name: host-fs
+          hostPath:
+            path: /
+            type: Directory
+        - name: fenced-path
+          emptyDir: {}
+        - name: fenced-path-compliance
+          emptyDir: {}
+        - name: fenced-path-compliance-scan-logs
+          emptyDir: {}
+
+      containers:
+        - name: deepfence-agent
+          image: deepfenceio/deepfence_agent_ce:latest
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+          args:
+            - -a MGMT_CONSOLE_IP_ADDR
+            - -f appsec
+            - -s 1
+            - -c 1
+          resources:
+            requests:
+              cpu: 150m
+              memory: 512Mi
+            limits:
+              memory: 1024Mi
+          env:
+            - name: DF_PKT_CAP
+              value: "N"
+            - name: DF_CAPTURE_INTF
+              value: "any"
+            - name: DF_PKT_CAPTURE_PERCENTAGE
+              value: "100"
+            - name: DF_PKT_SNAP_LENGTH
+              value: "65535"
+            - name: DF_TLS_ON
+              value: "1"
+            - name: DF_BACKEND_IP
+              value: "df-backend-ip"
+            - name: DF_BACKEND_PORT
+              value: "8010"
+            - name: DF_KUBERNETES_ON
+              value: "Y"
+            - name: DF_FIM_ON
+              value: "Y"
+          volumeMounts:
+            - mountPath: /var/run/docker.sock
+              name: docker-sock
+            - mountPath: /sys/kernel/debug
+              name: kernel-sys
+            - mountPath: /fenced/mnt/host/var/lib/docker
+              name: docker-file
+            - mountPath: /fenced/mnt/host
+              name: host-fs
+              readOnly: true
+            - mountPath: /var/log/fenced
+              name: fenced-path
+            - mountPath: /var/log/fenced/compliance
+              name: fenced-path-compliance
+            - mountPath: /var/log/fenced/compliance-scan-logs
+              name: fenced-path-compliance-scan-logs
+---
